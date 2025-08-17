@@ -93,13 +93,13 @@ The notebook generates plots and opens interactive `*.html` maps (leaflet) store
 
 # Example
 
-<iframe 
+<iframe
   src="https://mauricionoris.github.io/SenseGraph/sensor_comparison_map.html"
   width="100%"
   height="600"
 ></iframe>
 
-
+[Open full screen](https://mauricionoris.github.io/SenseGraph/sensor_comparison_map.html)
 
 
 ## Extending the Framework
