@@ -1,8 +1,3 @@
-# SenseGraph
-
-
-[Interactive coverage map HTML  (location: Londrina, Paraná - Brazil)](./sensor_comparison_map.html)
-
 
 # SenseGraph
 
@@ -19,12 +14,10 @@ SenseGraph provides a modular framework to explore and evaluate **sensor placeme
 - Visualize **coverage maps, rankings, and chosen sensor positions**
 - Incorporate new algorithms and domain‐specific **ISAC metrics**
 
----
-
 ## Project Structure
 
-SenseGraph/
-│
+SenseGraph│
+
 ├── main.py                     → Command-line interface for running experiments
 ├── analysis.ipynb             → Jupyter notebook for comparing/plotting results
 ├── requirements.txt
@@ -43,6 +36,7 @@ SenseGraph/
 ├── candidates.geojson
 ├── universe.geojson
 └── ...
+
 
 ## Installation
 
@@ -95,6 +89,14 @@ jupyter notebook analysis.ipynb
 The notebook generates plots and opens interactive `*.html` maps (leaflet) stored in the output directory.
 
 ---
+
+
+# Example
+
+
+[Interactive coverage map HTML  (location: Londrina, Paraná - Brazil)](./sensor_comparison_map.html)
+
+
 
 ## Extending the Framework
 
