@@ -95,11 +95,11 @@ The notebook generates plots and opens interactive `*.html` maps (leaflet) store
 
 <iframe
   src="https://mauricionoris.github.io/SenseGraph/sensor_comparison_map.html"
-  width="100%"
-  height="600"
+  width="800px"
+  height="400px"
 ></iframe>
 
-[Open full screen](https://mauricionoris.github.io/SenseGraph/sensor_comparison_map.html)
+[ See interactive map](https://mauricionoris.github.io/SenseGraph/sensor_comparison_map.html)
 
 
 ## Extending the Framework
