@@ -93,8 +93,12 @@ The notebook generates plots and opens interactive `*.html` maps (leaflet) store
 
 # Example
 
+<iframe 
+  src="https://mauricionoris.github.io/SenseGraph/sensor_comparison_map.html"
+  width="100%"
+  height="600"
+></iframe>
 
-[Interactive coverage map HTML  (location: Londrina, Paraná - Brazil)](./sensor_comparison_map.html)
 
 
 
