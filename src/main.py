@@ -22,18 +22,17 @@ def parse_and_setup():
     parser.add_argument('--ibge_layer',     type=str,   default=None,                                           help='Nome da layer (se GPKG)')
     parser.add_argument('--ibge_pop_field', type=str,   default=None,                                           help='Campo de população para pesos (opcional)')
     parser.add_argument('--gtfs_dir',       type=str,   default=None,                                           help='Diretório com arquivos GTFS')
-    parser.add_argument('--k',              type=int,   default=100,                                            help='Orçamento de sensores (k)')
+    parser.add_argument('--k',              type=int,   default=50,                                             help='Orçamento de sensores (k)')
     parser.add_argument('--radius_m',       type=float, default=100.0,                                          help='Raio de cobertura em metros')
     parser.add_argument('--top_n_central',  type=int,   default=250,                                            help='Top-N nós por score de centralidade para virar candidato')
-    parser.add_argument('--min_sep_m',      type=int,   default=100,                                            help='Separação mínima entre candidatos (m)')
+    parser.add_argument('--min_sep_m',      type=int,   default=50,                                             help='Separação mínima entre candidatos (m)')
     parser.add_argument('--betw_k',         type=int,   default=600,                                            help='Amostras k para betweenness (trade-off velocidade/qualidade)')
     parser.add_argument('--out_dir',        type=str,   default='./outputs',                                    help='Diretório de saída')
     parser.add_argument('--episodes',       type=int,   default=200)
     parser.add_argument('--lr',             type=float, default=1e-3)
     parser.add_argument('--hidden',         type=int,   default=64)
-    parser.add_argument('--gamma',          type=float, default=1.0)
+    parser.add_argument('--gamma',          type=float, default=0.90)
     parser.add_argument('--seed',           type=int,   default=42)
-    parser.add_argument('--save_dir',       type=str,   default='./grl_outputs')
     args = parser.parse_args()
 
     # monta o dicionário conforme sua estrutura
@@ -82,6 +81,7 @@ def main():
     print(all_results)
 
 main()
+
 
 
 

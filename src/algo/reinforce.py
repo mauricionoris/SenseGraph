@@ -17,6 +17,7 @@ from shapely.geometry import LineString
 from tqdm import trange, tqdm
 
 from common import util
+from algo import env
 
 from sklearn.neighbors import kneighbors_graph
 import scipy.sparse as sp
@@ -25,76 +26,6 @@ import scipy.sparse as sp
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
   
 
-# =============================
-# Ambiente de RL
-# =============================
-
-class SensorPlacementEnv:
-    """Ambiente tabular-mascarado de seleção sequencial sem reposição.
-    - observation(): devolve (features dinâmicas N x F_dyn)
-    - mask: ações inválidas (já selecionados)
-    - reward: ganho marginal de cobertura ponderada
-    """
-    def __init__(self, candidates: gpd.GeoDataFrame, universe: gpd.GeoDataFrame,
-                 cover_sets: Dict[int, Set[int]], budget_k: int,
-                 static_feats: np.ndarray, universe_weights: np.ndarray):
-        self.cand = candidates.reset_index(drop=True)
-        self.U = universe.reset_index(drop=True)
-        self.C = list(cover_sets.values())
-        self.candidates = list(cover_sets.keys()) 
-        self.k = budget_k
-        self.static = static_feats.astype(np.float32)  # shape [N, F_static]
-        self.w = universe_weights.astype(np.float32)   # shape [|U|]
-        self.N = len(self.cand)
-        self.reset()
-
-    def reset(self):
-        self.t = 0
-        self.selected: List[int] = []
-        self.covered: Set[int] = set()
-        return self._obs()
-
-    def _remaining_gain(self) -> np.ndarray:
-        # vetor N: soma dos pesos ainda não cobertos que cada candidato cobriria
-        gain = np.zeros(self.N, dtype=np.float32)
-
-
-        for i in range(self.N):
-        #for i, key in enumerate(self.C.keys()):
-
-            if i in self.selected:
-                continue
-            new = self.C[i] - self.covered
-            if new:
-                gain[i] = self.w[list(new)].sum()
-        return gain
-
-    def _obs(self) -> np.ndarray:
-        sel_flag = np.zeros((self.N, 1), dtype=np.float32)
-        if self.selected:
-            sel_flag[self.selected] = 1.0
-        rem_gain = self._remaining_gain().reshape(self.N, 1)
-        # normaliza rem_gain
-        rg = rem_gain
-        if rg.max() > 0:
-            rg = rg / (rg.max() + 1e-6)
-        dyn = np.concatenate([sel_flag, rg], axis=1)
-        feats = np.concatenate([self.static, dyn], axis=1)
-        mask = np.zeros(self.N, dtype=np.bool_)
-        if self.selected:
-            mask[self.selected] = True
-        return feats, mask
-
-    def step(self, action: int):
-        assert action not in self.selected
-        new_set = self.C[action] - self.covered
-        reward = float(self.w[list(new_set)].sum()) if new_set else 0.0
-        self.covered |= self.C[action]
-        self.selected.append(action)
-        self.t += 1
-        done = (self.t >= self.k)
-        obs = self._obs()
-        return obs, reward, done, {}
 
 # =============================
 # GCN Policy (sem PyG)
@@ -163,7 +94,7 @@ def build_node_features(candidates: gpd.GeoDataFrame,
 # Treinamento REINFORCE
 # =============================
 
-def train(env: SensorPlacementEnv, A_hat: torch.Tensor, episodes: int = 200, lr: float = 1e-3,
+def train(env: env.SensorPlacementEnv, A_hat: torch.Tensor, episodes: int = 200, lr: float = 1e-3,
           hidden: int = 64, gamma: float = 1.0, seed: int = 42):
     torch.manual_seed(seed)
     np.random.seed(seed)
@@ -175,7 +106,7 @@ def train(env: SensorPlacementEnv, A_hat: torch.Tensor, episodes: int = 200, lr:
     returns_hist = []
     best = {"ret": -1, "sel": None}
 
-    for ep in trange(episodes, desc="[Treino]"):
+    for ep in trange(episodes, desc="[Reinforce]"):
         feats, mask_np = env.reset()
         mask = torch.from_numpy(mask_np).to(device)
         X = torch.from_numpy(feats).float().to(device)
@@ -224,7 +155,7 @@ def train(env: SensorPlacementEnv, A_hat: torch.Tensor, episodes: int = 200, lr:
 # Export
 # =============================
 
-def greedy_env_placement(env: SensorPlacementEnv) -> List[int]:
+def greedy_env_placement(env: env.SensorPlacementEnv) -> List[int]:
 
     """
     Versão gulosa 1-1/e para o ambiente SensorPlacementEnv.

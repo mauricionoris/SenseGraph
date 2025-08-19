@@ -1,8 +1,9 @@
 from typing import Callable, List, Any
-from common import osm, util
-from algo import greedy, reinforce
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import pandas as pd
 
+from common import osm, util
+from algo import greedy, reinforce, a2c, env
 cache = False
 
 def pipeline(data: Any, steps: List[Callable]) -> Any:
@@ -91,9 +92,9 @@ def step_greedy_coverage(input):
 #Etapa (especifica reinforce)
 def step_setup_train_reinforce(input):
     X_static, A_hat = reinforce.build_node_features(input['candidates'], input['cent'])  # X_static shape [N, F_static]
-    env = reinforce.SensorPlacementEnv(input['candidates'], input['universe'], input['cover_sets'], input['args']['k'], X_static, input['weights'])
+    exec_env = env.SensorPlacementEnv(input['candidates'], input['universe'], input['cover_sets'], input['args']['k'], X_static, input['weights'])
 
-    policy, returns_hist, best = reinforce.train(env
+    policy, returns_hist, best = reinforce.train(exec_env
                                                , A_hat
                                                , episodes=input['args']['episodes']
                                                , lr=input['args']['lr']
@@ -101,20 +102,62 @@ def step_setup_train_reinforce(input):
                                                , gamma=input['args']['gamma']
                                                , seed=42)
 
-    input['chosen'][input['pipename']] = reinforce.greedy_env_placement(env)
+    input['chosen'][input['pipename']] = reinforce.greedy_env_placement(exec_env)
 
     return input 
 
+
+#Etapa (especifica a2c)
+def step_setup_train_a2c(input):
+    X_static, A_hat = reinforce.build_node_features(input['candidates'], input['cent'])  # X_static shape [N, F_static]
+    exec_env = env.SensorPlacementEnv(input['candidates'], input['universe'], input['cover_sets'], input['args']['k'], X_static, input['weights'])
+
+    policy, returns_hist, best = a2c.train(exec_env
+                                               , A_hat
+                                               , episodes=input['args']['episodes']
+                                               , lr=input['args']['lr']
+                                               , hidden=input['args']['hidden']
+                                               , gamma=input['args']['gamma']
+                                               , seed=42)
+
+    input['chosen'][input['pipename']] = reinforce.greedy_env_placement(exec_env)
+
+    return input 
 
 # Definindo a pipelines
 
 pipelines = {}
 
-pipelines['greedy']      = [step_load_osm, step_compute_centralities, step_rank_candidates, step_build_universe, step_cover_set
-                          , step_weights, step_greedy_coverage, step_export]
+pipelines['greedy']      = [step_load_osm, step_compute_centralities, step_rank_candidates, step_build_universe, step_cover_set, step_weights, step_greedy_coverage, step_export]
+pipelines['reinforce']   = [step_load_osm, step_compute_centralities, step_rank_candidates, step_build_universe, step_cover_set, step_weights, step_setup_train_reinforce, step_export]
+pipelines['a2c']         = [step_load_osm, step_compute_centralities, step_rank_candidates, step_build_universe, step_cover_set, step_weights, step_setup_train_a2c, step_export]
 
-pipelines['reinforce']   = [step_load_osm, step_compute_centralities, step_rank_candidates, step_build_universe, step_cover_set
-                          , step_weights, step_setup_train_reinforce, step_export]
+
+
+
+def run_single_pipeline(pipename, input_dict):
+    i = dict(input_dict)   # evita compartilhar o mesmo dicionário entre threads
+    i['pipename'] = pipename
+    print("Pipe Name:", pipename)
+    result = pipeline(i, pipelines[pipename])
+    print("Resultado final:", result)
+    return pipename, result
+
+def exec_mt(input_dict, max_workers=4):
+    futures = []
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        for p in pipelines.keys():
+            futures.append(
+                executor.submit(run_single_pipeline, p, input_dict)
+            )
+
+        results = {}
+        for f in as_completed(futures):
+            pipename, result = f.result()
+            results[pipename] = result
+
+    return results
+
 
 
 '''
@@ -157,29 +200,3 @@ input = {  'pipename': None
         }
                   
 '''
-
-from concurrent.futures import ThreadPoolExecutor, as_completed
-
-def run_single_pipeline(pipename, input_dict):
-    i = dict(input_dict)   # evita compartilhar o mesmo dicionário entre threads
-    i['pipename'] = pipename
-    print("Pipe Name:", pipename)
-    result = pipeline(i, pipelines[pipename])
-    print("Resultado final:", result)
-    return pipename, result
-
-def exec_mt(input_dict, max_workers=4):
-    futures = []
-    with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        for p in pipelines.keys():
-            futures.append(
-                executor.submit(run_single_pipeline, p, input_dict)
-            )
-
-        results = {}
-        for f in as_completed(futures):
-            pipename, result = f.result()
-            results[pipename] = result
-
-    return results
-
