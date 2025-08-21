@@ -1,6 +1,7 @@
 from typing import Callable, List, Any
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import pandas as pd
+import wandb as wb
 
 from common import osm, util
 from algo import greedy, reinforce, a2c, env
@@ -85,8 +86,23 @@ def step_export(input):
 
 #Etapa (especifica egreedy)
 def step_greedy_coverage(input):
+    setup = 0
+    r = wb.init(
+        # Set the wandb entity where your project will be logged (generally your team name).
+        entity="sensegraphteam",
+        # Set the wandb project where this run will be logged.
+        project="sensegraph",
+        name=f"Greedy-{setup}",
+        # Track hyperparameters and run metadata.
+        config={
+            "budget": input['args']['k'],
+            "weights": input['weights'],
+        },
+    )
 
-    input['chosen'][input['pipename']] = greedy.greedy_max_coverage(input['cover_sets'], input['weights'],  input['args']['k'])
+
+    input['chosen'][input['pipename']], r = greedy.greedy_max_coverage(input['cover_sets'], input['weights'],  input['args']['k'], r)
+    r.finish()
     return input
 
 #Etapa (especifica reinforce)
@@ -129,8 +145,8 @@ def step_setup_train_a2c(input):
 pipelines = {}
 
 pipelines['greedy']      = [step_load_osm, step_compute_centralities, step_rank_candidates, step_build_universe, step_cover_set, step_weights, step_greedy_coverage, step_export]
-pipelines['reinforce']   = [step_load_osm, step_compute_centralities, step_rank_candidates, step_build_universe, step_cover_set, step_weights, step_setup_train_reinforce, step_export]
-pipelines['a2c']         = [step_load_osm, step_compute_centralities, step_rank_candidates, step_build_universe, step_cover_set, step_weights, step_setup_train_a2c, step_export]
+#pipelines['reinforce']   = [step_load_osm, step_compute_centralities, step_rank_candidates, step_build_universe, step_cover_set, step_weights, step_setup_train_reinforce, step_export]
+#pipelines['a2c']         = [step_load_osm, step_compute_centralities, step_rank_candidates, step_build_universe, step_cover_set, step_weights, step_setup_train_a2c, step_export]
 
 
 
