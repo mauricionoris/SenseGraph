@@ -4,7 +4,7 @@ import pandas as pd
 import wandb as wb
 
 from common import osm, util
-from algo import greedy, reinforce, a2c, env
+from algo import greedy, env, reinforce, a2c, dqn, sac, ppo
 cache = False
 
 
@@ -179,6 +179,97 @@ def step_setup_train_a2c(input):
     r.finish()
     return input 
 
+def step_setup_train_dqn(input):
+    r = wb.init(
+        # Set the wandb entity where your project will be logged (generally your team name).
+        entity="sensegraphteam",
+        # Set the wandb project where this run will be logged.
+        project="sensegraph",
+        name=f"dqn-{setup}",
+        # Track hyperparameters and run metadata.
+        config={
+            "budget": input['args']['k'],
+            "number_of_candidates": len(input['candidates']),
+        },
+    )
+
+    X_static, A_hat = reinforce.build_node_features(input['candidates'], input['cent'])  # X_static shape [N, F_static]
+    exec_env = env.SensorPlacementEnv(input['candidates'], input['universe'], input['cover_sets'], input['args']['k'], X_static, input['weights'])
+
+    policy, returns_hist, best, r = dqn.train(exec_env
+                                               , A_hat
+                                               , episodes=input['args']['episodes']
+                                               , lr=input['args']['lr']
+                                               , hidden=input['args']['hidden']
+                                               , gamma=input['args']['gamma']
+                                               , seed=42
+                                               , run=r)
+
+    input['chosen'][input['pipename']] = reinforce.greedy_env_placement(exec_env)
+    r.finish()
+    return input 
+
+def step_setup_train_sac(input):
+    r = wb.init(
+        # Set the wandb entity where your project will be logged (generally your team name).
+        entity="sensegraphteam",
+        # Set the wandb project where this run will be logged.
+        project="sensegraph",
+        name=f"sac-{setup}",
+        # Track hyperparameters and run metadata.
+        config={
+            "budget": input['args']['k'],
+            "number_of_candidates": len(input['candidates']),
+        },
+    )
+
+    X_static, A_hat = reinforce.build_node_features(input['candidates'], input['cent'])  # X_static shape [N, F_static]
+    exec_env = env.SensorPlacementEnv(input['candidates'], input['universe'], input['cover_sets'], input['args']['k'], X_static, input['weights'])
+
+    policy, returns_hist, best, r = sac.train(exec_env
+                                               , A_hat
+                                               , episodes=input['args']['episodes']
+                                               , lr=input['args']['lr']
+                                               , hidden=input['args']['hidden']
+                                               , gamma=input['args']['gamma']
+                                               , seed=42
+                                               , run=r)
+
+    input['chosen'][input['pipename']] = reinforce.greedy_env_placement(exec_env)
+    r.finish()
+    return input 
+
+
+def step_setup_train_ppo(input):
+    r = wb.init(
+        # Set the wandb entity where your project will be logged (generally your team name).
+        entity="sensegraphteam",
+        # Set the wandb project where this run will be logged.
+        project="sensegraph",
+        name=f"ppo-{setup}",
+        # Track hyperparameters and run metadata.
+        config={
+            "budget": input['args']['k'],
+            "number_of_candidates": len(input['candidates']),
+        },
+    )
+
+    X_static, A_hat = reinforce.build_node_features(input['candidates'], input['cent'])  # X_static shape [N, F_static]
+    exec_env = env.SensorPlacementEnv(input['candidates'], input['universe'], input['cover_sets'], input['args']['k'], X_static, input['weights'])
+
+    policy, returns_hist, best, r = ppo.train(exec_env
+                                               , A_hat
+                                               , episodes=input['args']['episodes']
+                                               , lr=input['args']['lr']
+                                               , hidden=input['args']['hidden']
+                                               , gamma=input['args']['gamma']
+                                               , seed=42
+                                               , run=r)
+
+    input['chosen'][input['pipename']] = reinforce.greedy_env_placement(exec_env)
+    r.finish()
+    return input 
+
 # Definindo a pipelines
 
 
@@ -197,9 +288,13 @@ common_steps = [
 ]
 
 pipelines = {
-    'greedy':    [step_greedy_coverage, step_export],
-    'reinforce': [step_setup_train_reinforce, step_export],
-    'a2c':       [step_setup_train_a2c, step_export],
+#    'greedy':    [step_greedy_coverage, step_export],
+#    'reinforce': [step_setup_train_reinforce, step_export],
+#    'a2c':       [step_setup_train_a2c, step_export],
+#    'dqn':       [step_setup_train_dqn, step_export],
+     'sac':       [step_setup_train_sac, step_export],
+     'ppo':       [step_setup_train_ppo, step_export],
+
 }
 
 # =============================
