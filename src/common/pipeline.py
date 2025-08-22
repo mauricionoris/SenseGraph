@@ -7,6 +7,10 @@ from common import osm, util
 from algo import greedy, reinforce, a2c, env
 cache = False
 
+
+setup = 3
+
+
 def pipeline(data: Any, steps: List[Callable]) -> Any:
 
     for step in steps:
@@ -86,7 +90,7 @@ def step_export(input):
 
 #Etapa (especifica egreedy)
 def step_greedy_coverage(input):
-    setup = 0
+
     r = wb.init(
         # Set the wandb entity where your project will be logged (generally your team name).
         entity="sensegraphteam",
@@ -96,7 +100,7 @@ def step_greedy_coverage(input):
         # Track hyperparameters and run metadata.
         config={
             "budget": input['args']['k'],
-            "weights": input['weights'],
+            "number_of_candidates": len(input['candidates']),
         },
     )
 
@@ -107,46 +111,156 @@ def step_greedy_coverage(input):
 
 #Etapa (especifica reinforce)
 def step_setup_train_reinforce(input):
+
+
+    r = wb.init(
+        # Set the wandb entity where your project will be logged (generally your team name).
+        entity="sensegraphteam",
+        # Set the wandb project where this run will be logged.
+        project="sensegraph",
+        name=f"reinforce-{setup}",
+        # Track hyperparameters and run metadata.
+        config={
+            "budget": input['args']['k'],
+            "number_of_candidates": len(input['candidates']),
+        },
+    )
+
     X_static, A_hat = reinforce.build_node_features(input['candidates'], input['cent'])  # X_static shape [N, F_static]
     exec_env = env.SensorPlacementEnv(input['candidates'], input['universe'], input['cover_sets'], input['args']['k'], X_static, input['weights'])
 
-    policy, returns_hist, best = reinforce.train(exec_env
+    policy, returns_hist, best, r = reinforce.train(exec_env
                                                , A_hat
                                                , episodes=input['args']['episodes']
                                                , lr=input['args']['lr']
                                                , hidden=input['args']['hidden']
                                                , gamma=input['args']['gamma']
-                                               , seed=42)
+                                               , seed=42
+                                               , run=r)
 
     input['chosen'][input['pipename']] = reinforce.greedy_env_placement(exec_env)
-
+    
+    r.finish()
+    
     return input 
 
 
 #Etapa (especifica a2c)
 def step_setup_train_a2c(input):
+
+
+
+    r = wb.init(
+        # Set the wandb entity where your project will be logged (generally your team name).
+        entity="sensegraphteam",
+        # Set the wandb project where this run will be logged.
+        project="sensegraph",
+        name=f"a2c-{setup}",
+        # Track hyperparameters and run metadata.
+        config={
+            "budget": input['args']['k'],
+            "number_of_candidates": len(input['candidates']),
+        },
+    )
+
     X_static, A_hat = reinforce.build_node_features(input['candidates'], input['cent'])  # X_static shape [N, F_static]
     exec_env = env.SensorPlacementEnv(input['candidates'], input['universe'], input['cover_sets'], input['args']['k'], X_static, input['weights'])
 
-    policy, returns_hist, best = a2c.train(exec_env
+    policy, returns_hist, best, r = a2c.train(exec_env
                                                , A_hat
                                                , episodes=input['args']['episodes']
                                                , lr=input['args']['lr']
                                                , hidden=input['args']['hidden']
                                                , gamma=input['args']['gamma']
-                                               , seed=42)
+                                               , seed=42
+                                               , run=r)
 
     input['chosen'][input['pipename']] = reinforce.greedy_env_placement(exec_env)
-
+    r.finish()
     return input 
 
 # Definindo a pipelines
 
+
+
+# =============================
+# Definição dos pipelines
+# =============================
+
+common_steps = [
+    step_load_osm,
+    step_compute_centralities,
+    step_rank_candidates,
+    step_build_universe,
+    step_cover_set,
+    step_weights,
+]
+
+pipelines = {
+    'greedy':    [step_greedy_coverage, step_export],
+    'reinforce': [step_setup_train_reinforce, step_export],
+    'a2c':       [step_setup_train_a2c, step_export],
+}
+
+# =============================
+# Executor
+# =============================
+
+def run_single_pipeline(pipename, base_result):
+    """Executa apenas os steps específicos do pipeline, a partir do resultado comum."""
+    i = dict(base_result)   # cópia para não compartilhar estado
+    i['pipename'] = pipename
+    print("Pipe Name:", pipename)
+    result = pipeline(i, pipelines[pipename])
+    print("Resultado final:", result)
+    return pipename, result
+
+
+def exec_mt(input_dict, max_workers=4):
+    # 1. Executa steps comuns uma única vez
+    base_result = pipeline(dict(input_dict), common_steps)
+
+    # 2. Executa steps específicos em paralelo
+    futures = []
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        for p in pipelines.keys():
+            futures.append(
+                executor.submit(run_single_pipeline, p, base_result)
+            )
+
+        results = {}
+        for f in as_completed(futures):
+            pipename, result = f.result()
+            results[pipename] = result
+
+    return results
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+'''
 pipelines = {}
 
 pipelines['greedy']      = [step_load_osm, step_compute_centralities, step_rank_candidates, step_build_universe, step_cover_set, step_weights, step_greedy_coverage, step_export]
-#pipelines['reinforce']   = [step_load_osm, step_compute_centralities, step_rank_candidates, step_build_universe, step_cover_set, step_weights, step_setup_train_reinforce, step_export]
-#pipelines['a2c']         = [step_load_osm, step_compute_centralities, step_rank_candidates, step_build_universe, step_cover_set, step_weights, step_setup_train_a2c, step_export]
+pipelines['reinforce']   = [step_load_osm, step_compute_centralities, step_rank_candidates, step_build_universe, step_cover_set, step_weights, step_setup_train_reinforce, step_export]
+pipelines['a2c']         = [step_load_osm, step_compute_centralities, step_rank_candidates, step_build_universe, step_cover_set, step_weights, step_setup_train_a2c, step_export]
 
 
 
@@ -176,7 +290,7 @@ def exec_mt(input_dict, max_workers=4):
 
 
 
-'''
+
 single thread
 def exec(input):
     for p in pipelines.keys():

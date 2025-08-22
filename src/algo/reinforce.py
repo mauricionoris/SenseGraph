@@ -22,6 +22,9 @@ from algo import env
 from sklearn.neighbors import kneighbors_graph
 import scipy.sparse as sp
 
+import wandb as wb
+import time
+
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
   
@@ -95,7 +98,12 @@ def build_node_features(candidates: gpd.GeoDataFrame,
 # =============================
 
 def train(env: env.SensorPlacementEnv, A_hat: torch.Tensor, episodes: int = 200, lr: float = 1e-3,
-          hidden: int = 64, gamma: float = 1.0, seed: int = 42):
+          hidden: int = 64, gamma: float = 1.0, seed: int = 42, run: wb.Run = None):
+
+
+
+    start_total = time.time()
+
     torch.manual_seed(seed)
     np.random.seed(seed)
 
@@ -107,6 +115,7 @@ def train(env: env.SensorPlacementEnv, A_hat: torch.Tensor, episodes: int = 200,
     best = {"ret": -1, "sel": None}
 
     for ep in trange(episodes, desc="[Reinforce]"):
+        ep_start = time.time()
         feats, mask_np = env.reset()
         mask = torch.from_numpy(mask_np).to(device)
         X = torch.from_numpy(feats).float().to(device)
@@ -145,11 +154,34 @@ def train(env: env.SensorPlacementEnv, A_hat: torch.Tensor, episodes: int = 200,
         optimizer.zero_grad(); loss.backward(); optimizer.step()
 
         ep_return = float(sum(rewards))
+        ep_length = len(rewards)
         returns_hist.append(ep_return)
         if ep_return > best["ret"]:
             best = {"ret": ep_return, "sel": env.selected.copy()}
 
-    return policy, returns_hist, best
+        ep_time = time.time() - ep_start
+
+        # 🔹 Log por episódio
+        run.log({
+            "episode": ep,
+            "ep_return": ep_return,
+            "ep_length": ep_length,
+            "loss": float(loss.item()),
+            "baseline": float(baseline.item()),
+            "best_return_so_far": best["ret"],
+            "ep_time": ep_time,
+        })
+                
+    
+    # 🔹 Log final
+    total_time = time.time() - start_total
+    run.log({
+        "avg_return": sum(returns_hist)/len(returns_hist),
+        "best_return": best["ret"],
+        "total_time": total_time,
+    })
+
+    return policy, returns_hist, best, run
 
 # =============================
 # Export
