@@ -7,9 +7,9 @@
 { "type": "Feature", "properties": { "node": 1116084687.0, "source": "centrality", "cand_id": "c00016", "selected": 1 }, "geometry": { "type": "Point", "coordinates": [ -51.1484572, -23.3536776 ] } },
 { "type": "Feature", "properties": { "node": 1116086723.0, "source": "centrality", "cand_id": "c00020", "selected": 1 }, "geometry": { "type": "Point", "coordinates": [ -51.1471235, -23.3513947 ] } },
 { "type": "Feature", "properties": { "node": 364819426.0, "source": "centrality", "cand_id": "c00028", "selected": 1 }, "geometry": { "type": "Point", "coordinates": [ -51.1459992, -23.3038852 ] } },
-{ "type": "Feature", "properties": { "node": 2655765156.0, "source": "centrality", "cand_id": "c00029", "selected": 1 }, "geometry": { "type": "Point", "coordinates": [ -51.1512207, -23.3603327 ] } },
 { "type": "Feature", "properties": { "node": 1115839485.0, "source": "centrality", "cand_id": "c00036", "selected": 1 }, "geometry": { "type": "Point", "coordinates": [ -51.1488947, -23.2805684 ] } },
 { "type": "Feature", "properties": { "node": 2965403448.0, "source": "centrality", "cand_id": "c00043", "selected": 1 }, "geometry": { "type": "Point", "coordinates": [ -51.1873613, -23.2935423 ] } },
+{ "type": "Feature", "properties": { "node": 359100102.0, "source": "centrality", "cand_id": "c00047", "selected": 1 }, "geometry": { "type": "Point", "coordinates": [ -51.1546598, -23.3592983 ] } },
 { "type": "Feature", "properties": { "node": 364816322.0, "source": "centrality", "cand_id": "c00053", "selected": 1 }, "geometry": { "type": "Point", "coordinates": [ -51.1545616, -23.2929622 ] } },
 { "type": "Feature", "properties": { "node": 2178696308.0, "source": "centrality", "cand_id": "c00057", "selected": 1 }, "geometry": { "type": "Point", "coordinates": [ -51.154308, -23.2650467 ] } },
 { "type": "Feature", "properties": { "node": 3966821526.0, "source": "centrality", "cand_id": "c00085", "selected": 1 }, "geometry": { "type": "Point", "coordinates": [ -51.1573325, -23.2592655 ] } },
@@ -47,10 +47,11 @@
 { "type": "Feature", "properties": { "node": null, "source": "school", "cand_id": "c00336", "selected": 1 }, "geometry": { "type": "Point", "coordinates": [ -51.159424035631574, -23.32816565 ] } },
 { "type": "Feature", "properties": { "node": null, "source": "school", "cand_id": "c00338", "selected": 1 }, "geometry": { "type": "Point", "coordinates": [ -51.083100252595386, -23.5258373 ] } },
 { "type": "Feature", "properties": { "node": null, "source": "school", "cand_id": "c00341", "selected": 1 }, "geometry": { "type": "Point", "coordinates": [ -51.13034172311707, -23.36800805 ] } },
-{ "type": "Feature", "properties": { "node": null, "source": "school", "cand_id": "c00344", "selected": 1 }, "geometry": { "type": "Point", "coordinates": [ -51.182219723640777, -23.2572916 ] } },
+{ "type": "Feature", "properties": { "node": null, "source": "school", "cand_id": "c00375", "selected": 1 }, "geometry": { "type": "Point", "coordinates": [ -51.181818398814968, -23.25783415 ] } },
 { "type": "Feature", "properties": { "node": null, "source": "school", "cand_id": "c00378", "selected": 1 }, "geometry": { "type": "Point", "coordinates": [ -51.126064140262997, -23.3827391 ] } },
 { "type": "Feature", "properties": { "node": null, "source": "school", "cand_id": "c00381", "selected": 1 }, "geometry": { "type": "Point", "coordinates": [ -51.179718604283806, -23.3209889 ] } },
 { "type": "Feature", "properties": { "node": null, "source": "university", "cand_id": "c00383", "selected": 1 }, "geometry": { "type": "Point", "coordinates": [ -51.1698806, -23.31811205 ] } },
+{ "type": "Feature", "properties": { "node": null, "source": "school", "cand_id": "c00395", "selected": 1 }, "geometry": { "type": "Point", "coordinates": [ -51.143734814133452, -23.2618664 ] } },
 { "type": "Feature", "properties": { "node": null, "source": "school", "cand_id": "c00403", "selected": 1 }, "geometry": { "type": "Point", "coordinates": [ -51.203309936129571, -23.1932175 ] } },
 { "type": "Feature", "properties": { "node": null, "source": "school", "cand_id": "c00412", "selected": 1 }, "geometry": { "type": "Point", "coordinates": [ -51.156771879026167, -23.37015925 ] } }
 ]

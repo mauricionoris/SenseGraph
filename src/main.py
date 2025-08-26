@@ -2,7 +2,7 @@ import logging
 import argparse
 from pathlib import Path
 
-from common import pipeline
+from common import pipeline2 as pipeline
 
 
 logger = logging.getLogger(__name__)
@@ -77,7 +77,7 @@ def main():
     data = parse_and_setup()
     #pipeline.exec(data) # versão single thread
 
-    all_results = pipeline.exec_mt(data, max_workers=8)
+    all_results = pipeline.exec_with_baseline(data, max_workers=8)
     print(all_results)
 
 main()
