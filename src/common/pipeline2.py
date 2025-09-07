@@ -12,7 +12,7 @@ from algo import env2 as env
 cache = False
 
 
-setup = 6
+setup = 1
 
 
 def pipeline(data: Any, steps: List[Callable]) -> Any:
@@ -219,7 +219,7 @@ def run_single_pipeline(pipename, base_result):
     i['pipename'] = pipename
     print("Pipe Name:", pipename)
     result = pipeline(i, rl_pipelines[pipename])
-    print("Resultado final:", result)
+    #print("Resultado final:", result)
     return pipename, result
 
 

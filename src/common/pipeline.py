@@ -289,11 +289,11 @@ common_steps = [
 
 pipelines = {
 #    'greedy':    [step_greedy_coverage, step_export],
-#    'reinforce': [step_setup_train_reinforce, step_export],
+    'reinforce': [step_setup_train_reinforce, step_export],
 #    'a2c':       [step_setup_train_a2c, step_export],
 #    'dqn':       [step_setup_train_dqn, step_export],
-     'sac':       [step_setup_train_sac, step_export],
-     'ppo':       [step_setup_train_ppo, step_export],
+#    'sac':       [step_setup_train_sac, step_export],
+#     'ppo':       [step_setup_train_ppo, step_export],
 
 }
 

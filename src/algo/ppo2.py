@@ -3,6 +3,8 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.distributions import Categorical
 from tqdm import trange
+import numpy as np
+import wandb as wb
 
 
 class PolicyNet(nn.Module):
@@ -19,7 +21,17 @@ class PolicyNet(nn.Module):
         return self.net(x)
 
 
-def train(env, A_hat, episodes=20, lr=1e-3, hidden=128, gamma=0.99, seed=42, run=None):
+def train(
+    env,
+    A_hat,
+    episodes: int = 20,
+    lr: float = 1e-3,
+    hidden: int = 128,
+    gamma: float = 0.99,
+    grad_clip_norm: float = 1.0,
+    seed: int = 42,
+    run: wb.Run = None,
+):
     torch.manual_seed(seed)
     in_dim = env.static.shape[1] + 2   # static + sel_flag + rem_gain
     out_dim = env.N
@@ -27,18 +39,19 @@ def train(env, A_hat, episodes=20, lr=1e-3, hidden=128, gamma=0.99, seed=42, run
     optimizer = optim.Adam(policy.parameters(), lr=lr)
 
     returns_hist = []
-    best = None
+    best = {"ret": -1.0, "sel": None}
 
     for ep in trange(episodes, desc="[PPO]"):
         obs, mask = env.reset()
         done = False
         log_probs = []
         rewards = []
-        values = []
 
+        # baseline já consome todo o budget → skip
         if len(env.selected) >= env.k:
-            # baseline já consome todo o budget → skip
-            returns_hist.append(0)
+            returns_hist.append(0.0)
+            if run is not None:
+                run.log({"episode": ep, "return": 0.0})
             continue
 
         while not done:
@@ -86,15 +99,31 @@ def train(env, A_hat, episodes=20, lr=1e-3, hidden=128, gamma=0.99, seed=42, run
 
         optimizer.zero_grad()
         loss.backward()
+        if grad_clip_norm is not None:
+            nn.utils.clip_grad_norm_(policy.parameters(), grad_clip_norm)
         optimizer.step()
 
-        returns_hist.append(returns.sum().item())
+        ep_return = float(returns.sum().item())
+        returns_hist.append(ep_return)
 
-        # update best
-        if best is None or returns.sum().item() > best:
-            best = returns.sum().item()
+        # cobertura funcional (peso coberto / total)
+        if getattr(env, 'w', None) is not None:
+            total_w = float(env.w.sum()) if env.w.sum() > 0 else 1.0
+            cov_w = float(env.w[list(env.covered)].sum()) if len(env.covered) else 0.0
+            coverage = cov_w / total_w
+        else:
+            coverage = 0.0
+
+        if ep_return > best["ret"]:
+            best = {"ret": ep_return, "sel": env.selected.copy()}
 
         if run is not None:
-            run.log({"episode": ep, "return": returns.sum().item()})
+            run.log({
+                "episode": ep,
+                "return": ep_return,
+                "avg_adv": float(adv.mean().item()),
+                "coverage": float(coverage),
+                "selected_count": int(len(env.selected)),
+            })
 
     return policy, returns_hist, best, run

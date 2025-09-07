@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 import argparse
 from pathlib import Path
@@ -27,7 +26,6 @@ import time
 
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
-  
 
 
 # =============================
@@ -52,21 +50,17 @@ class GCNPolicy(nn.Module):
         probs = torch.softmax(logits, dim=0)
         return probs, logits
 
+
 # =============================
 # Features de nó e adjacência
 # =============================
 
 def build_node_features(candidates: gpd.GeoDataFrame,
                         centralities: pd.DataFrame) -> Tuple[np.ndarray, np.ndarray]:
-    # mapeia centralidades para cand por nearest (usando índice do gdf_nodes original como proxy)
-    # aqui simplificamos: como 'centralities' veio dos nós da rede, e 'candidates' contém parte deles,
-    # para linhas com origem em POIs usaremos média das centralidades
     deg = centralities.set_index('node')[['degree','betweenness','closeness']]
-    # valores agregados (média) para fallback
     agg = deg.mean().to_dict()
     feats = []
     for _, r in candidates.reset_index().iterrows():
-        # se o candidato tem coluna 'node', use as centralidades reais
         if 'node' in candidates.columns and not pd.isna(r.get('node', np.nan)) and r['index'] in deg.index:
             dv = deg.loc[r['index']].values
         else:
@@ -77,14 +71,14 @@ def build_node_features(candidates: gpd.GeoDataFrame,
     X = np.vstack(feats).astype(np.float32)
     # normalização min-max por coluna
     X = (X - X.min(0, keepdims=True)) / (X.max(0, keepdims=True) - X.min(0, keepdims=True) + 1e-6)
+
     # adjacência por proximidade geográfica (kNN) + simétrica
     N = len(candidates)
     coords = util.ensure_crs_utm(candidates)
     xy = np.vstack([coords.geometry.x.values, coords.geometry.y.values]).T
 
     A = kneighbors_graph(xy, n_neighbors=min(10, max(2, N-1)), mode='connectivity', include_self=True)
-    A = A.minimum(A.T)  # tornar simétrica
-    # A_hat = D^{-1/2} (A + I) D^{-1/2}
+    A = A.minimum(A.T)
     I = sp.eye(N, format='csr')
     A_tilde = (A + I).tocsr()
     degs = np.array(A_tilde.sum(1)).flatten()
@@ -93,6 +87,64 @@ def build_node_features(candidates: gpd.GeoDataFrame,
     A_hat = torch.from_numpy(A_hat.toarray()).float()
     return X, A_hat
 
+
+# =============================
+# Métricas Funcionais
+# =============================
+def compute_functional_metrics(env) -> Dict[str, float]:
+    """
+    Compute coverage, redundancy, and efficiency metrics
+    based on the current state of the environment.
+    Works whether env.candidates is a DataFrame or just a list.
+    """
+    N = env.N
+    weights = env.w
+
+    # Build mapping: node_id -> index
+    if hasattr(env, "candidates"):
+        if isinstance(env.candidates, (pd.DataFrame, gpd.GeoDataFrame)) and "node" in env.candidates.columns:
+            id2idx = {nid: i for i, nid in enumerate(env.candidates["node"].values)}
+        else:
+            # candidates is just a list/array → identity mapping
+            id2idx = {i: i for i in range(N)}
+    else:
+        id2idx = {i: i for i in range(N)}
+
+    # Covered set
+    covered = set().union(*[env.C[i] for i in env.selected]) if env.selected else set()
+    covered_idx = [id2idx[v] for v in covered if v in id2idx]
+
+    # Coverage metrics
+    coverage_ratio = len(covered_idx) / N if N > 0 else 0.0
+    weighted_coverage = (
+        weights.iloc[covered_idx].sum() / weights.sum()
+        if len(covered_idx) > 0
+        else 0.0
+    )
+
+    # Redundancy
+    cover_count = np.zeros(N, dtype=int)
+    for i in env.selected:
+        for v in env.C[i]:
+            if v in id2idx:
+                cover_count[id2idx[v]] += 1
+
+    k_coverage = np.mean(cover_count >= 2) if N > 0 else 0.0
+    redundant_index = cover_count.mean() if N > 0 else 0.0
+
+    # Efficiency
+    cost = len(env.selected)
+    coverage_per_cost = coverage_ratio / cost if cost > 0 else 0.0
+
+    return {
+        "coverage_ratio": coverage_ratio,
+        "weighted_coverage": weighted_coverage,
+        "k_coverage": k_coverage,
+        "redundant_index": redundant_index,
+        "cost": cost,
+        "coverage_per_cost": coverage_per_cost,
+    }
+
 # =============================
 # Treinamento REINFORCE
 # =============================
@@ -100,10 +152,7 @@ def build_node_features(candidates: gpd.GeoDataFrame,
 def train(env: env.SensorPlacementEnv, A_hat: torch.Tensor, episodes: int = 200, lr: float = 1e-3,
           hidden: int = 64, gamma: float = 1.0, seed: int = 42, run: wb.Run = None):
 
-
-
     start_total = time.time()
-
     torch.manual_seed(seed)
     np.random.seed(seed)
 
@@ -121,11 +170,9 @@ def train(env: env.SensorPlacementEnv, A_hat: torch.Tensor, episodes: int = 200,
         X = torch.from_numpy(feats).float().to(device)
         A = A_hat.to(device)
 
-        logps = []
-        rewards = []
-        actions = []
-
+        logps, rewards, actions = [], [], []
         done = False
+
         while not done:
             probs, logits = policy(X, A, mask)
             dist = torch.distributions.Categorical(probs)
@@ -137,11 +184,10 @@ def train(env: env.SensorPlacementEnv, A_hat: torch.Tensor, episodes: int = 200,
             logps.append(logp)
             actions.append(a)
 
-            # prepara próxima observação
             X = torch.from_numpy(feats_next).float().to(device)
             mask = torch.from_numpy(mask_next).to(device)
 
-        # REINFORCE com baseline simples (média da recompensa por passo)
+        # REINFORCE com baseline simples
         R = 0.0
         returns = []
         for r in reversed(rewards):
@@ -161,8 +207,8 @@ def train(env: env.SensorPlacementEnv, A_hat: torch.Tensor, episodes: int = 200,
 
         ep_time = time.time() - ep_start
 
-        # 🔹 Log por episódio
-        run.log({
+        # 🔹 Métricas de treinamento
+        train_metrics = {
             "episode": ep,
             "ep_return": ep_return,
             "ep_length": ep_length,
@@ -170,25 +216,33 @@ def train(env: env.SensorPlacementEnv, A_hat: torch.Tensor, episodes: int = 200,
             "baseline": float(baseline.item()),
             "best_return_so_far": best["ret"],
             "ep_time": ep_time,
-        })
-                
-    
+        }
+
+        # 🔹 Métricas funcionais
+        func_metrics = compute_functional_metrics(env)
+
+        # 🔹 Loga todas
+        run.log({**train_metrics, **func_metrics})
+
     # 🔹 Log final
     total_time = time.time() - start_total
+    final_func_metrics = compute_functional_metrics(env)
+
     run.log({
         "avg_return": sum(returns_hist)/len(returns_hist),
         "best_return": best["ret"],
         "total_time": total_time,
+        **final_func_metrics
     })
 
     return policy, returns_hist, best, run
+
 
 # =============================
 # Export
 # =============================
 
 def greedy_env_placement(env: env.SensorPlacementEnv) -> List[int]:
-
     """
     Versão gulosa 1-1/e para o ambiente SensorPlacementEnv.
     Seleciona sequencialmente os sensores com maior ganho marginal de cobertura ponderada.
@@ -212,7 +266,6 @@ def greedy_env_placement(env: env.SensorPlacementEnv) -> List[int]:
                 best_i = i
         if best_i is None:
             break
-        # aplica a ação no ambiente
         (_, _), r, _, _ = env.step(best_i)
         chosen.append(best_i)
         covered |= env.C[best_i]

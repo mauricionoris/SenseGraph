@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 import numpy as np
-from typing import List, Optional
+from typing import List, Optional, Dict
 from tqdm import trange
 import wandb as wb
 import time
@@ -27,7 +27,7 @@ class ActorCriticGCN(nn.Module):
         H = self.relu(A_hat @ self.fc1(X))
         H = self.relu(A_hat @ self.fc2(H))
 
-        logits = self.actor_out(H).squeeze(-1)  # [N]
+        logits = self.actor_out(H).squeeze(-1)
         if mask is not None:
             logits = logits.masked_fill(mask, -1e9)
         probs = torch.softmax(logits, dim=0)
@@ -43,39 +43,79 @@ class ActorCriticGCN(nn.Module):
         V = self.critic_out(pooled).squeeze(-1)
         return probs, logits, V
 
-
 @torch.no_grad()
 def _argmax_action(policy_module, X, A, mask):
-    """Escolhe ação determinística (greedy)"""
     probs, _, _ = policy_module(X, A, mask)
     return int(torch.argmax(probs).item())
 
+# =============================
+# Functional Metrics
+# =============================
+
+def compute_functional_metrics(env) -> Dict[str, float]:
+    N = env.N
+    weights = env.w
+
+    # Build node ID -> index mapping robustly
+    if hasattr(env, "candidates"):
+        if isinstance(env.candidates, (list, np.ndarray)):
+            id2idx = {i: i for i in range(N)}
+        elif isinstance(env.candidates, (pd.DataFrame, gpd.GeoDataFrame)) and "node" in env.candidates.columns:
+            id2idx = {nid: i for i, nid in enumerate(env.candidates["node"].values)}
+        else:
+            id2idx = {i: i for i in range(N)}
+    else:
+        id2idx = {i: i for i in range(N)}
+
+    covered = set().union(*[env.C[i] for i in env.selected]) if env.selected else set()
+    covered_idx = [id2idx[v] for v in covered if v in id2idx]
+
+    coverage_ratio = len(covered_idx) / N if N > 0 else 0.0
+    weighted_coverage = weights.iloc[covered_idx].sum() / weights.sum() if covered_idx else 0.0
+
+    # Redundancy
+    cover_count = np.zeros(N, dtype=int)
+    for i in env.selected:
+        for v in env.C[i]:
+            if v in id2idx:
+                cover_count[id2idx[v]] += 1
+
+    k_coverage = np.mean(cover_count >= 2) if N > 0 else 0.0
+    redundant_index = cover_count.mean() if N > 0 else 0.0
+
+    cost = len(env.selected)
+    coverage_per_cost = coverage_ratio / cost if cost > 0 else 0.0
+
+    return {
+        "coverage_ratio": coverage_ratio,
+        "weighted_coverage": weighted_coverage,
+        "k_coverage": k_coverage,
+        "redundant_index": redundant_index,
+        "cost": cost,
+        "coverage_per_cost": coverage_per_cost,
+    }
 
 # =============================
 # Training Loop (A2C)
 # =============================
 
 def train(env,
-                       A_hat: torch.Tensor,
-                       episodes: int = 200,
-                       lr: float = 1e-3,
-                       hidden: int = 64,
-                       gamma: float = 1.0,
-                       entropy_coef: float = 1e-2,
-                       value_coef: float = 0.5,
-                       seed: int = 42,
-                       device: str = "cpu",
-                       greedy_eval_every: Optional[int] = None,
-                       run: wb.Run = None):
-    """
-    Treina um A2C on-policy acumulando perdas por episódio.
-    """
-
-    start_total = time.time()
+          A_hat: torch.Tensor,
+          episodes: int = 200,
+          lr: float = 1e-3,
+          hidden: int = 64,
+          gamma: float = 1.0,
+          entropy_coef: float = 1e-2,
+          value_coef: float = 0.5,
+          seed: int = 42,
+          device: str = "cpu",
+          greedy_eval_every: Optional[int] = None,
+          run: wb.Run = None):
     
+    start_total = time.time()
     torch.manual_seed(seed); np.random.seed(seed)
 
-    in_feats = env.static.shape[1] + 2  # + sel_flag + rem_gain
+    in_feats = env.static.shape[1] + 2
     ac = ActorCriticGCN(in_feats, hidden).to(device)
     optimizer = optim.Adam(ac.parameters(), lr=lr)
 
@@ -119,35 +159,22 @@ def train(env,
         policy_loss = torch.stack(policy_losses).sum()
         value_loss = torch.stack(value_losses).sum()
         entropy_loss = -torch.stack(entropies).sum()
-
         loss = policy_loss + value_coef * value_loss + entropy_coef * entropy_loss
+
         optimizer.zero_grad(); loss.backward(); optimizer.step()
 
         ep_return = float(sum(rewards))
         ep_length = len(rewards)
-        
         returns_hist.append(ep_return)
         if ep_return > best["ret"]:
             best = {"ret": ep_return, "sel": env.selected.copy()}
 
-        # avaliação greedy (opcional)
-        if greedy_eval_every is not None and (ep + 1) % greedy_eval_every == 0:
-            env.reset()
-            feats_g, mask_g_np = env._obs()
-            Xg = torch.from_numpy(feats_g).float().to(device)
-            maskg = torch.from_numpy(mask_g_np).to(device)
-            done_g = False; greedy_ret = 0.0
-            while not done_g:
-                a_g = _argmax_action(ac, Xg, A, maskg)
-                (feats_gn, mask_gn), r_g, done_g, _ = env.step(a_g)
-                greedy_ret += float(r_g)
-                Xg = torch.from_numpy(feats_gn).float().to(device)
-                maskg = torch.from_numpy(mask_gn).to(device)
-            # poderia salvar greedy_ret para análise
+        # compute functional metrics safely
+        func_metrics = compute_functional_metrics(env)
 
         ep_time = time.time() - ep_start
 
-        # 🔹 Log por episódio
+        # 🔹 Log per episode
         run.log({
             "episode": ep,
             "ep_return": ep_return,
@@ -159,9 +186,9 @@ def train(env,
             "advantage_mean": float(torch.stack([adv.detach() for adv in value_losses]).mean().item()),
             "best_return_so_far": best["ret"],
             "ep_time": ep_time,
+            **func_metrics  # log functional metrics too
         })
-                
-    
+
     # 🔹 Log final
     total_time = time.time() - start_total
     run.log({
@@ -169,6 +196,5 @@ def train(env,
         "best_return": best["ret"],
         "total_time": total_time,
     })
-
 
     return ac, returns_hist, best, run
